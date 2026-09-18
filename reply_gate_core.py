@@ -1,4 +1,4 @@
-"""Pure decision logic for Choice Gate.
+"""Pure decision logic for Reply Gate.
 
 Nothing in this module imports AstrBot, so the whole decision path is unit
 testable on its own. The plugin (``main.py``) only wires events to these

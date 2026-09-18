@@ -1,11 +1,11 @@
 {
   "metadata": {
-    "display_name": "Choice Gate",
+    "display_name": "Reply Gate",
     "short_desc": "Decide by choice probability whether a message reaches the LLM.",
     "desc": "Gates LLM replies with TypeSafe Jev: one request fans out several choice heads, answers are strictly validated, and rejected messages are stopped before the LLM request is queued. Adds a burst debounce."
   },
   "messages": {
-    "status.header": "Choice Gate: {state} · {model}",
+    "status.header": "Reply Gate: {state} · {model}",
     "status.policy": "P(RESPOND) >= {threshold} · min confidence {confidence} · {fail_mode}",
     "status.stats": "Decisions: {stats}",
     "status.stats_empty": "Decisions: none yet",
@@ -15,12 +15,12 @@
     "state.off": "off",
     "verdict.respond": "respond",
     "verdict.silent": "silent",
-    "cmd.enabled": "Choice Gate is now {state}.",
+    "cmd.enabled": "Reply Gate is now {state}.",
     "cmd.reset": "Cleared the debounce window and the decision stats.",
     "prompt.header": "{endpoint} · model {model} · key {key_state} · {count} messages",
     "prompt.key_set": "set",
     "prompt.key_unset": "unset",
-    "test.usage": "Usage: /choicegate test <text>",
+    "test.usage": "Usage: /replygate test <text>",
     "test.header": "Dry run · input: {text} · messages: {count}",
     "test.endpoint": "Endpoint: {endpoint} · model {model}",
     "test.validation_failed": "Answer failed strict validation: {error}",

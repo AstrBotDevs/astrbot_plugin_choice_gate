@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "display_name": "Choice Gate · 概率触发门",
+    "display_name": "回复闸门",
     "short_desc": "用选择概率决定一条消息要不要触发 LLM。",
     "desc": "基于 TypeSafe Jev 的会话触发门：一次请求扇出多个 choice head，答案严格校验，被拒的消息在进入 LLM 请求之前就被拦掉，并带突发去抖。"
   },
@@ -94,7 +94,7 @@
     }
   },
   "messages": {
-    "status.header": "Choice Gate：{state} · {model}",
+    "status.header": "Reply Gate：{state} · {model}",
     "status.policy": "阈值 P(RESPOND) >= {threshold} · 最低置信度 {confidence} · {fail_mode}",
     "status.stats": "统计：{stats}",
     "status.stats_empty": "统计：暂无",
@@ -104,12 +104,12 @@
     "state.off": "已关闭",
     "verdict.respond": "触发",
     "verdict.silent": "静默",
-    "cmd.enabled": "Choice Gate {state}。",
+    "cmd.enabled": "Reply Gate {state}。",
     "cmd.reset": "已清空去抖窗口与决策统计。",
     "prompt.header": "{endpoint} · 模型 {model} · 密钥{key_state} · 转录 {count} 条",
     "prompt.key_set": "已设置",
     "prompt.key_unset": "未设置",
-    "test.usage": "用法：/choicegate test <文本>",
+    "test.usage": "用法：/replygate test <文本>",
     "test.header": "干跑 · 输入：{text} · 消息数：{count}（未写入真实转录）",
     "test.endpoint": "端点：{endpoint} · 模型 {model}",
     "test.validation_failed": "答案未通过严格校验：{error}",

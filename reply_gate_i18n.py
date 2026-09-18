@@ -1,4 +1,4 @@
-"""Locale resources for Choice Gate.
+"""Locale resources for Reply Gate.
 
 AstrBot reads ``.astrbot-plugin/i18n/<locale>.json`` for the plugin page (see
 docs/zh/dev/star/guides/plugin-i18n.md). The same files carry a ``messages``

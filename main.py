@@ -1,6 +1,6 @@
 # ruff: noqa: E402 - the plugin directory is added to sys.path before the
 # sibling module is imported, so those imports intentionally follow that setup.
-"""Choice Gate: decide whether a message should reach the LLM at all.
+"""Reply Gate: decide whether a message should reach the LLM at all.
 
 Inspired by browser-use/jev-ultrafast. One request carries every choice
 question about the chat state (speculative heads); the answer is strictly
@@ -25,7 +25,7 @@ if _PLUGIN_DIR not in sys.path:
     sys.path.insert(0, _PLUGIN_DIR)
 
 import httpx
-from choice_gate_core import (
+from reply_gate_core import (
     RESPOND,
     BurstLimiter,
     BypassRules,
@@ -39,7 +39,7 @@ from choice_gate_core import (
     resolve_decisions,
     threshold_sensitivity,
 )
-from choice_gate_i18n import Translator, load_i18n, resolve_locale
+from reply_gate_i18n import Translator, load_i18n, resolve_locale
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -57,7 +57,7 @@ GOAL = (
 )
 
 
-class ChoiceGate(Star):
+class ReplyGate(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
@@ -244,7 +244,7 @@ class ChoiceGate(Star):
         except Exception as exc:  # noqa: BLE001 - TypeSafe failures must never break chat
             self._stats["error"] += 1
             logger.warning(
-                f"choice gate TypeSafe call failed: {type(exc).__name__}: {exc}"
+                f"reply gate TypeSafe call failed: {type(exc).__name__}: {exc}"
             )
             return self._fail(event, f"TypeSafe error: {type(exc).__name__}")
 
@@ -253,7 +253,7 @@ class ChoiceGate(Star):
         if allowed and "reply_target" in resolved:
             target = resolved["reply_target"][0]
         event.set_extra(
-            "_choice_gate",
+            "_reply_gate",
             {"respond": allowed, "reason": reason, "target": target},
         )
         self._note(event, resolved, allowed, reason, target)
@@ -267,20 +267,20 @@ class ChoiceGate(Star):
     def _pass(self, event: AstrMessageEvent, reason: str) -> None:
         self._stats["bypassed"] += 1
         if self._cfg("log_decisions", False):
-            logger.info(f"choice gate passed ({reason})")
+            logger.info(f"reply gate passed ({reason})")
 
     def _reject(self, event: AstrMessageEvent, reason: str) -> None:
         self._stats["ignored"] += 1
-        event.set_extra("_choice_gate", {"respond": False, "reason": reason})
+        event.set_extra("_reply_gate", {"respond": False, "reason": reason})
         event.stop_event()
         if self._cfg("log_decisions", False):
-            logger.info(f"choice gate ignored message ({reason})")
+            logger.info(f"reply gate ignored message ({reason})")
 
     def _fail(self, event: AstrMessageEvent, reason: str) -> None:
         if self._policy().fail_open:
             self._stats["fail_open"] += 1
             if self._cfg("log_decisions", False):
-                logger.info(f"choice gate failing open ({reason})")
+                logger.info(f"reply gate failing open ({reason})")
             return
         self._stats["fail_closed"] += 1
         self._reject(event, f"fail closed: {reason}")
@@ -306,7 +306,7 @@ class ChoiceGate(Star):
         """Tell the model which message the gate decided to answer."""
         if not self._cfg("inject_hint", True):
             return
-        outcome = event.get_extra("_choice_gate") or {}
+        outcome = event.get_extra("_reply_gate") or {}
         target = outcome.get("target")
         if not target:
             return
@@ -367,9 +367,9 @@ class ChoiceGate(Star):
     # ------------------------------------------------------------------ #
     # status command
     # ------------------------------------------------------------------ #
-    @filter.command("choicegate")
-    async def choicegate(self, event: AstrMessageEvent):
-        """Choice Gate status and tuning. Usage: /choicegate [status|on|off|reset|test <text>|prompt]"""
+    @filter.command("replygate")
+    async def replygate(self, event: AstrMessageEvent):
+        """Reply Gate status and tuning. Usage: /replygate [status|on|off|reset|test <text>|prompt]"""
         argument = self._command_argument(event)
         action = argument.split(maxsplit=1)[0].lower() if argument else "status"
         rest = (
@@ -412,7 +412,7 @@ class ChoiceGate(Star):
         if text.startswith("/"):
             text = text[1:].lstrip()
         lowered = text.lower()
-        for token in ("choicegate",):
+        for token in ("replygate",):
             if lowered.startswith(token):
                 return text[len(token) :].strip()
         return text

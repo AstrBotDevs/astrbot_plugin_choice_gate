@@ -1,4 +1,4 @@
-# astrbot_plugin_choice_gate
+# astrbot_plugin_reply_gate
 
 用 [TypeSafe Jev](https://docs.typesafe.ai/introduction) 的选择概率决定一条消息要不要触发
 LLM。思路来自 [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)：
@@ -31,7 +31,7 @@ prompt 里写"别乱回复"的区别。
 
 ```bash
 cd AstrBot/data/plugins
-git clone https://github.com/AstrBotDevs/astrbot_plugin_choice_gate
+git clone https://github.com/AstrBotDevs/astrbot_plugin_reply_gate
 ```
 
 在 WebUI 插件页重载，然后填 `api_key`。
@@ -59,11 +59,11 @@ git clone https://github.com/AstrBotDevs/astrbot_plugin_choice_gate
 ## 指令
 
 ```
-/choicegate                       查看状态、统计与最近决策
-/choicegate on|off                开关
-/choicegate reset                 清空去抖窗口与统计
-/choicegate test <文本>           按真实请求与阈值干跑一次
-/choicegate prompt                打印下一步 gate 请求体
+/replygate                       查看状态、统计与最近决策
+/replygate on|off                开关
+/replygate reset                 清空去抖窗口与统计
+/replygate test <文本>           按真实请求与阈值干跑一次
+/replygate prompt                打印下一步 gate 请求体
 ```
 
 `test` 复用生产路径，不写入转录、不消耗去抖额度；端点或密钥配错时会把异常和当前
@@ -91,5 +91,5 @@ ruff check .
 pytest -q          # 纯逻辑与语言查找，不需要 AstrBot
 ```
 
-`choice_gate_core.py` 是决策逻辑，`i18n.py` 是语言查找，`main.py` 只负责把 AstrBot 事件
+`reply_gate_core.py` 是决策逻辑，`i18n.py` 是语言查找，`main.py` 只负责把 AstrBot 事件
 接到这两者上。

@@ -16,4 +16,4 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -q
-      - run: python -m compileall -q main.py choice_gate_core.py
+      - run: python -m compileall -q main.py reply_gate_core.py

@@ -1,4 +1,4 @@
-# astrbot_plugin_choice_gate
+# astrbot_plugin_reply_gate
 
 Decides whether a message should reach the LLM at all, using
 [TypeSafe Jev](https://docs.typesafe.ai/introduction) choice probabilities.
@@ -36,7 +36,7 @@ input), which is the premise for asking it about every candidate message.
 
 ```bash
 cd AstrBot/data/plugins
-git clone https://github.com/AstrBotDevs/astrbot_plugin_choice_gate
+git clone https://github.com/AstrBotDevs/astrbot_plugin_reply_gate
 ```
 
 Reload the plugin in the WebUI, then fill in `api_key`.
@@ -64,11 +64,11 @@ Reload the plugin in the WebUI, then fill in `api_key`.
 ## Commands
 
 ```
-/choicegate                       status, stats, recent decisions
-/choicegate on|off                toggle
-/choicegate reset                 clear the debounce window and stats
-/choicegate test <text>           dry run through the real request and thresholds
-/choicegate prompt                dump the next gate request body
+/replygate                       status, stats, recent decisions
+/replygate on|off                toggle
+/replygate reset                 clear the debounce window and stats
+/replygate test <text>           dry run through the real request and thresholds
+/replygate prompt                dump the next gate request body
 ```
 
 `test` reuses the production path, writes nothing to the transcript, and spends
@@ -116,5 +116,5 @@ ruff check .
 pytest -q          # pure logic and locale rules, no AstrBot required
 ```
 
-`choice_gate_core.py` holds the decision logic, `i18n.py` the locale lookup, and
+`reply_gate_core.py` holds the decision logic, `i18n.py` the locale lookup, and
 `main.py` only wires AstrBot events to those two.

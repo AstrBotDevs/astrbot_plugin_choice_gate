@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from choice_gate_i18n import Translator, load_i18n, normalize_locale, resolve_locale  # noqa: E402
+from reply_gate_i18n import Translator, load_i18n, normalize_locale, resolve_locale  # noqa: E402
 
 RESOURCES = {
     "en-US": {"messages": {"only_en": "Only English", "both": "Both {value}"}},

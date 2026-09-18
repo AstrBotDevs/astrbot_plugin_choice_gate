@@ -1,8 +1,8 @@
-name: astrbot_plugin_choice_gate
-display_name: Choice Gate
+name: astrbot_plugin_reply_gate
+display_name: Reply Gate
 desc: Gates LLM replies with TypeSafe Jev: one request fans out several choice heads, answers are strictly validated, and rejected messages are stopped before the LLM request is queued.
 short_desc: Decide by choice probability whether a message reaches the LLM.
 version: 0.2.0
 author: Soulter
-repo: https://github.com/AstrBotDevs/astrbot_plugin_choice_gate
+repo: https://github.com/AstrBotDevs/astrbot_plugin_reply_gate
 astrbot_version: ">=4.28.0,<5"
