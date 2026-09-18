@@ -299,6 +299,20 @@ class BypassRules:
         return None
 
 
+def threshold_sensitivity(
+    probability: float,
+    thresholds: Sequence[float],
+) -> list[tuple[float, bool]]:
+    """Verdict of one P(RESPOND) across candidate thresholds, for tuning.
+
+    Lets an operator see how much headroom a decision has before editing the
+    configured threshold.
+    """
+    return [
+        (float(threshold), probability >= float(threshold)) for threshold in thresholds
+    ]
+
+
 class BurstLimiter:
     """Sliding-window reply budget per session: the debounce half of the gate.
 

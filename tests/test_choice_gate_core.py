@@ -22,6 +22,7 @@ from choice_gate_core import (  # noqa: E402
     parse_answers,
     render_prompt,
     resolve_decisions,
+    threshold_sensitivity,
     validate_choice,
 )
 
@@ -227,3 +228,9 @@ def test_burst_limiter_is_transparent_when_disabled_and_can_forget():
     limiter.record("s")
     limiter.forget()
     assert limiter.allow("s")[0] is True
+
+
+def test_threshold_sensitivity_reports_a_verdict_per_threshold():
+    verdicts = threshold_sensitivity(0.62, (0.3, 0.5, 0.7, 0.9))
+    assert verdicts == [(0.3, True), (0.5, True), (0.7, False), (0.9, False)]
+    assert threshold_sensitivity(0.5, (0.5,)) == [(0.5, True)]

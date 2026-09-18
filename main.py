@@ -33,6 +33,7 @@ from astrbot.core.agent.message import TextPart
 
 from choice_gate_core import (
     RESPOND,
+    threshold_sensitivity,
     BypassRules,
     BurstLimiter,
     ChatMessage,
@@ -49,6 +50,8 @@ from choice_gate_core import (
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 DEFAULT_TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone"
 RETRY_STATUS = {429, 503, 529}
+DEFAULT_THRESHOLDS = (0.3, 0.5, 0.7, 0.9)
+
 GOAL = (
     "Decide whether the assistant should answer the newest message in this chat, "
     "and which message the reply should focus on."
@@ -223,8 +226,7 @@ class ChoiceGate(Star):
         )
 
         try:
-            answers = await self._ask(state, questions, umo)
-            resolved = resolve_decisions(answers, questions)
+            resolved, _answers, _latency_ms = await self._probe(state, questions, umo)
         except ChoiceValidationError as exc:
             self._stats["invalid"] += 1
             return self._fail(event, f"rejected malformed answer: {exc}")
@@ -312,6 +314,17 @@ class ChoiceGate(Star):
     # ------------------------------------------------------------------ #
     # backends
     # ------------------------------------------------------------------ #
+    async def _probe(self, state, questions, umo: str):
+        """One real decision round trip: ask the backend, then validate.
+
+        Shared by the gate and the ``test`` command so a dry run exercises the
+        exact same prompt, parsing and validation as production.
+        """
+        started = time.monotonic()
+        answers = await self._ask(state, questions, umo)
+        resolved = resolve_decisions(answers, questions)
+        return resolved, answers, int((time.monotonic() - started) * 1000)
+
     async def _ask(self, state, questions, umo: str) -> dict:
         backend = str(self._cfg("backend", "provider")).lower()
         if backend == "typesafe":
@@ -390,9 +403,15 @@ class ChoiceGate(Star):
     # ------------------------------------------------------------------ #
     @filter.command("choicegate")
     async def choicegate(self, event: AstrMessageEvent):
-        """查看 / 切换 Choice Gate 状态。用法: /choicegate [status|on|off|reset]"""
-        argument = (event.message_str or "").split(maxsplit=1)
-        action = argument[1].strip().lower() if len(argument) > 1 else "status"
+        """Choice Gate 状态与调试。用法: /choicegate [status|on|off|reset|test <文本>|prompt]"""
+        argument = self._command_argument(event)
+        action = argument.split(maxsplit=1)[0].lower() if argument else "status"
+        rest = (
+            argument.split(maxsplit=1)[1].strip()
+            if len(argument.split(maxsplit=1)) > 1
+            else ""
+        )
+
         if action in {"on", "off"}:
             self.config["enable"] = action == "on"
             save = getattr(self.config, "save_config", None)
@@ -408,7 +427,120 @@ class ChoiceGate(Star):
             self._recent.clear()
             yield event.plain_result("Choice Gate 统计与去抖窗口已重置。")
             return
+        if action == "prompt":
+            yield event.plain_result(self._prompt_text(event))
+            return
+        if action == "test":
+            yield event.plain_result(await self._test_text(event, rest))
+            return
         yield event.plain_result(self._status_text())
+
+    @staticmethod
+    def _command_argument(event: AstrMessageEvent) -> str:
+        """Return the text after the command name.
+
+        ``message_str`` may or may not still carry the wake prefix and the
+        command name, so both are stripped when present.
+        """
+        text = (event.message_str or "").strip()
+        if text.startswith("/"):
+            text = text[1:].lstrip()
+        lowered = text.lower()
+        for token in ("choicegate",):
+            if lowered.startswith(token):
+                return text[len(token) :].strip()
+        return text
+
+    def _prompt_text(self, event: AstrMessageEvent) -> str:
+        """Show exactly what the next gate call would send."""
+        transcript = list(self._transcripts.get(event.unified_msg_origin, ()))
+        state = build_state(GOAL, transcript)
+        questions = build_questions(
+            state, reply_target_enabled=bool(self._cfg("reply_target", True))
+        )
+        backend = str(self._cfg("backend", "provider")).lower()
+        if backend == "openai":
+            system, user = render_prompt(state, questions)
+            preview = f"system:\n{system}\n\nuser:\n{user}"
+        else:
+            preview = json.dumps(
+                {"state": state, "questions": questions}, ensure_ascii=False
+            )
+        if len(preview) > 1500:
+            preview = preview[:1500] + "\n…（已截断）"
+        return (
+            f"📤 后端 {backend} / 模型 {self._cfg('model', '-')}"
+            f" / 密钥 {'已设置' if self._cfg('api_key', '') else '未设置（provider 后端可忽略）'}\n"
+            f"转录 {len(transcript)} 条\n\n{preview}"
+        )
+
+    async def _test_text(self, event: AstrMessageEvent, text: str) -> str:
+        """Dry run of the gate against a text, without touching real state."""
+        if not text:
+            return "用法: /choicegate test <文本>"
+        umo = event.unified_msg_origin
+        transcript = list(self._transcripts.get(umo, ()))
+        probe = ChatMessage(
+            index=(transcript[-1].index + 1) if transcript else 1,
+            sender=event.get_sender_name() or str(event.get_sender_id()),
+            text=text[:500],
+            at_bot=False,
+            arrived_at=time.monotonic(),
+        )
+        transcript.append(probe)
+        state = build_state(GOAL, transcript)
+        questions = build_questions(
+            state, reply_target_enabled=bool(self._cfg("reply_target", True))
+        )
+        policy = self._policy()
+        header = (
+            f"🧪 Choice Gate 测试\n输入: {text[:100]}\n"
+            f"消息数: {len(transcript)}（未写入真实转录）\n"
+            f"后端: {self._cfg('backend', 'provider')} / {self._cfg('model', '-')}"
+        )
+        try:
+            resolved, _answers, latency_ms = await self._probe(state, questions, umo)
+        except ChoiceValidationError as exc:
+            return f"{header}\n❌ 后端返回的答案未通过严格校验: {exc}"
+        except Exception as exc:  # noqa: BLE001 - the report must survive any backend failure
+            return (
+                f"{header}\n❌ 调用失败: {type(exc).__name__}: {exc}\n"
+                "（fail_mode="
+                f"{'open' if policy.fail_open else 'closed'}，实际聊天中"
+                f"{'会照常回复' if policy.fail_open else '会静默'}）"
+            )
+
+        decision = resolved["decision"]
+        target = resolved.get("reply_target")
+        probability = decision[1].get(RESPOND, 0.0)
+        allowed, reason = policy.check(decision)
+        lines = [
+            header,
+            f"P(RESPOND)={probability:.3f}  confidence={decision[2]:.3f}  "
+            f"target={target[0] if target else '-'}",
+            f"→ 判定: {'触发 LLM' if allowed else '静默'}（{reason}）",
+            "阈值敏感性: "
+            + " / ".join(
+                f">={threshold:.2f} {'触发' if verdict else '静默'}"
+                for threshold, verdict in threshold_sensitivity(
+                    probability, DEFAULT_THRESHOLDS
+                )
+            ),
+            f"耗时: {latency_ms}ms",
+            "head 概率:",
+            "  decision: " + ", ".join(f"{k}={v:.3f}" for k, v in decision[1].items()),
+        ]
+        if target:
+            lines.append(
+                "  reply_target: "
+                + ", ".join(f"{k}={v:.3f}" for k, v in target[1].items())
+            )
+        if bool(self._cfg("debounce_enable", True)):
+            allowed_now, detail = self._limiter.allow(umo)
+            lines.append(
+                f"去抖: 当前{'允许再回复' if allowed_now else '已用满预算'}（{detail}）"
+            )
+        return "\n".join(lines)
 
     def _status_text(self) -> str:
         lines = [

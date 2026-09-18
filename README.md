@@ -54,10 +54,30 @@ git clone https://github.com/AstrBotDevs/astrbot_plugin_choice_gate
 ## 指令
 
 ```
-/choicegate            查看状态与最近决策
-/choicegate on|off     开关
-/choicegate reset      清空去抖窗口与统计
+/choicegate                      查看状态、统计与最近决策
+/choicegate on|off               开关
+/choicegate reset                清空去抖窗口与统计
+/choicegate test <文本>          干跑一次：走完全相同的请求/校验/阈值路径并打印报告
+/choicegate prompt               打印下一步 gate 请求的真实内容
 ```
+
+`test` 是调参用的，不会写入真实转录、也不消耗去抖预算：
+
+```
+🧪 Choice Gate 测试
+输入: 在吗
+消息数: 4（未写入真实转录）
+后端: openai / deepseek-chat
+P(RESPOND)=0.130  confidence=0.900  target=-
+→ 判定: 静默（p(RESPOND)=0.13 < 0.50）
+阈值敏感性: >=0.30 静默 / >=0.50 静默 / >=0.70 静默 / >=0.90 静默
+耗时: 412ms
+head 概率:
+  decision: RESPOND=0.130, IGNORE=0.870
+去抖: 当前允许再回复（0/1 replies in window）
+```
+
+后端配错时 `test` 会直接把异常打出来（含 `fail_mode` 下的实际行为），省得去翻日志。
 
 ## 代价与边界（请先读）
 
