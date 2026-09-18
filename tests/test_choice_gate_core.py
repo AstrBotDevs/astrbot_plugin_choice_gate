@@ -1,6 +1,5 @@
 """Unit tests for the pure decision path (no AstrBot runtime required)."""
 
-import json
 import sys
 from pathlib import Path
 
@@ -20,7 +19,6 @@ from choice_gate_core import (  # noqa: E402
     build_questions,
     build_state,
     parse_answers,
-    render_prompt,
     resolve_decisions,
     threshold_sensitivity,
     validate_choice,
@@ -84,10 +82,11 @@ def test_validate_choice_tolerates_two_percent_of_probability_noise():
 # --------------------------------------------------------------------------- #
 # parse_answers / resolve_decisions
 # --------------------------------------------------------------------------- #
-def test_parse_answers_reads_both_wire_shapes():
+def test_parse_answers_reads_the_typesafe_envelope():
     assert set(parse_answers({"answers": {"decision": answer()}})) == {"decision"}
-    assert set(parse_answers({"decision": answer()})) == {"decision"}
-    assert parse_answers({"unrelated": 1}) == {}
+    for malformed in ({"decision": answer()}, {"unrelated": 1}, []):
+        with pytest.raises(ChoiceValidationError):
+            parse_answers(malformed)
 
 
 def test_resolve_decisions_ignores_the_unused_target_head():
@@ -163,16 +162,6 @@ def test_build_questions_offers_message_indices_and_can_be_disabled():
     assert set(questions["reply_target"]["criteria"]) == {"1", "2"}
     assert set(build_questions(state, reply_target_enabled=False)) == {"decision"}
     assert set(build_questions(build_state("goal", []))) == {"decision"}
-
-
-def test_render_prompt_returns_a_json_request_naming_every_head():
-    state = build_state("goal", messages(1))
-    questions = build_questions(state)
-    system, user = render_prompt(state, questions)
-    assert "decision" in system and "reply_target" in system
-    parsed = json.loads(user)
-    assert parsed["state"]["goal"] == "goal"
-    assert set(parsed["questions"]) == {"decision", "reply_target"}
 
 
 # --------------------------------------------------------------------------- #

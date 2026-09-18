@@ -25,17 +25,10 @@ if _PLUGIN_DIR not in sys.path:
     sys.path.insert(0, _PLUGIN_DIR)
 
 import httpx
-from astrbot.api import AstrBotConfig, logger
-from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.provider import ProviderRequest
-from astrbot.api.star import Context, Star
-from astrbot.core.agent.message import TextPart
-
 from choice_gate_core import (
     RESPOND,
-    threshold_sensitivity,
-    BypassRules,
     BurstLimiter,
+    BypassRules,
     ChatMessage,
     ChoiceValidationError,
     EventFacts,
@@ -43,11 +36,16 @@ from choice_gate_core import (
     build_questions,
     build_state,
     parse_answers,
-    render_prompt,
     resolve_decisions,
+    threshold_sensitivity,
 )
 
-DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
+from astrbot.api import AstrBotConfig, logger
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.provider import ProviderRequest
+from astrbot.api.star import Context, Star
+from astrbot.core.agent.message import TextPart
+
 DEFAULT_TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone"
 RETRY_STATUS = {429, 503, 529}
 DEFAULT_THRESHOLDS = (0.3, 0.5, 0.7, 0.9)
@@ -226,14 +224,16 @@ class ChoiceGate(Star):
         )
 
         try:
-            resolved, _answers, _latency_ms = await self._probe(state, questions, umo)
+            resolved, _answers, _latency_ms = await self._probe(state, questions)
         except ChoiceValidationError as exc:
             self._stats["invalid"] += 1
             return self._fail(event, f"rejected malformed answer: {exc}")
-        except Exception as exc:  # noqa: BLE001 - backend failures must never break chat
+        except Exception as exc:  # noqa: BLE001 - TypeSafe failures must never break chat
             self._stats["error"] += 1
-            logger.warning(f"choice gate backend failed: {type(exc).__name__}: {exc}")
-            return self._fail(event, f"backend error: {type(exc).__name__}")
+            logger.warning(
+                f"choice gate TypeSafe call failed: {type(exc).__name__}: {exc}"
+            )
+            return self._fail(event, f"TypeSafe error: {type(exc).__name__}")
 
         allowed, reason = self._policy().check(resolved["decision"])
         target = None
@@ -312,28 +312,21 @@ class ChoiceGate(Star):
         )
 
     # ------------------------------------------------------------------ #
-    # backends
+    # TypeSafe backend
     # ------------------------------------------------------------------ #
-    async def _probe(self, state, questions, umo: str):
-        """One real decision round trip: ask the backend, then validate.
+    async def _probe(self, state, questions):
+        """One real TypeSafe round trip: ask, then strictly validate.
 
         Shared by the gate and the ``test`` command so a dry run exercises the
-        exact same prompt, parsing and validation as production.
+        exact same request, parsing and validation as production.
         """
         started = time.monotonic()
-        answers = await self._ask(state, questions, umo)
+        answers = await self._ask_typesafe(state, questions)
         resolved = resolve_decisions(answers, questions)
         return resolved, answers, int((time.monotonic() - started) * 1000)
 
-    async def _ask(self, state, questions, umo: str) -> dict:
-        backend = str(self._cfg("backend", "provider")).lower()
-        if backend == "typesafe":
-            return await self._ask_typesafe(state, questions)
-        if backend == "openai":
-            return await self._ask_openai(state, questions)
-        return await self._ask_provider(state, questions, umo)
-
     async def _post_json(self, url: str, body: dict, headers: dict) -> dict:
+        """POST with bounded retries; mirrors Jev's 429/503/529 retry policy."""
         retries = max(0, int(self._cfg("retries", 1)))
         for attempt in range(retries + 1):
             response = await self._http().post(url, json=body, headers=headers)
@@ -345,58 +338,18 @@ class ChoiceGate(Star):
         raise RuntimeError("model unavailable")
 
     async def _ask_typesafe(self, state, questions) -> dict:
-        url = str(self._cfg("base_url", DEFAULT_TYPESAFE_URL))
+        """One request answers every head (speculative fan-out)."""
         body = {
             "model": str(self._cfg("model", "jev-latest")),
             "state": state,
             "questions": questions,
         }
         payload = await self._post_json(
-            url, body, {"Authorization": f"Bearer {self._cfg('api_key', '')}"}
-        )
-        return parse_answers(payload)
-
-    async def _ask_openai(self, state, questions) -> dict:
-        base = str(self._cfg("base_url", DEFAULT_BASE_URL)).rstrip("/")
-        system, user = render_prompt(state, questions)
-        body = {
-            "model": str(self._cfg("model", "deepseek-chat")),
-            "max_tokens": int(self._cfg("max_tokens", 512)),
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        }
-        if bool(self._cfg("disable_reasoning", True)):
-            if "api.deepseek.com" in base:
-                body["thinking"] = {"type": "disabled"}
-            else:
-                body["reasoning"] = {"enabled": False}
-        payload = await self._post_json(
-            f"{base}/chat/completions",
+            str(self._cfg("base_url", DEFAULT_TYPESAFE_URL)),
             body,
             {"Authorization": f"Bearer {self._cfg('api_key', '')}"},
         )
-        content = payload["choices"][0]["message"]["content"]
-        return parse_answers(json.loads(content))
-
-    async def _ask_provider(self, state, questions, umo: str) -> dict:
-        provider_id = str(self._cfg("provider_id", "") or "")
-        provider = (
-            self.context.get_provider_by_id(provider_id)
-            if provider_id
-            else await self.context.get_using_provider_async(umo)
-        )
-        if provider is None:
-            raise RuntimeError("no provider available for the choice gate")
-        system, user = render_prompt(state, questions)
-        response = await provider.text_chat(
-            prompt=user,
-            session_id=umo,
-            system_prompt=system,
-        )
-        return parse_answers(json.loads(response.completion_text or "{}"))
+        return parse_answers(payload)
 
     # ------------------------------------------------------------------ #
     # status command
@@ -458,19 +411,18 @@ class ChoiceGate(Star):
         questions = build_questions(
             state, reply_target_enabled=bool(self._cfg("reply_target", True))
         )
-        backend = str(self._cfg("backend", "provider")).lower()
-        if backend == "openai":
-            system, user = render_prompt(state, questions)
-            preview = f"system:\n{system}\n\nuser:\n{user}"
-        else:
-            preview = json.dumps(
-                {"state": state, "questions": questions}, ensure_ascii=False
-            )
+        body = {
+            "model": str(self._cfg("model", "jev-latest")),
+            "state": state,
+            "questions": questions,
+        }
+        preview = json.dumps(body, ensure_ascii=False)
         if len(preview) > 1500:
             preview = preview[:1500] + "\n…（已截断）"
         return (
-            f"📤 后端 {backend} / 模型 {self._cfg('model', '-')}"
-            f" / 密钥 {'已设置' if self._cfg('api_key', '') else '未设置（provider 后端可忽略）'}\n"
+            f"📤 {self._cfg('base_url', DEFAULT_TYPESAFE_URL)}"
+            f" / 模型 {self._cfg('model', 'jev-latest')}"
+            f" / 密钥 {'已设置' if self._cfg('api_key', '') else '未设置'}\n"
             f"转录 {len(transcript)} 条\n\n{preview}"
         )
 
@@ -496,13 +448,13 @@ class ChoiceGate(Star):
         header = (
             f"🧪 Choice Gate 测试\n输入: {text[:100]}\n"
             f"消息数: {len(transcript)}（未写入真实转录）\n"
-            f"后端: {self._cfg('backend', 'provider')} / {self._cfg('model', '-')}"
+            f"端点: {self._cfg('base_url', DEFAULT_TYPESAFE_URL)} / {self._cfg('model', 'jev-latest')}"
         )
         try:
-            resolved, _answers, latency_ms = await self._probe(state, questions, umo)
+            resolved, _answers, latency_ms = await self._probe(state, questions)
         except ChoiceValidationError as exc:
             return f"{header}\n❌ 后端返回的答案未通过严格校验: {exc}"
-        except Exception as exc:  # noqa: BLE001 - the report must survive any backend failure
+        except Exception as exc:  # noqa: BLE001 - the report must survive any TypeSafe failure
             return (
                 f"{header}\n❌ 调用失败: {type(exc).__name__}: {exc}\n"
                 "（fail_mode="
@@ -545,7 +497,7 @@ class ChoiceGate(Star):
     def _status_text(self) -> str:
         lines = [
             f"Choice Gate: {'开启' if self._cfg('enable', True) else '关闭'}"
-            f" / 后端 {self._cfg('backend', 'provider')}",
+            f" / TypeSafe {self._cfg('model', 'jev-latest')}",
             f"阈值 P(RESPOND) >= {self._cfg('respond_threshold', 0.5)}"
             f", 最低置信度 {self._cfg('min_confidence', 0.0)}"
             f", 失败策略 {'fail-open' if self._policy().fail_open else 'fail-closed'}",

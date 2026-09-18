@@ -12,12 +12,12 @@ guessed.
 
 from __future__ import annotations
 
-import json
 import math
 import time
 from collections import deque
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 RESPOND = "RESPOND"
 IGNORE = "IGNORE"
@@ -86,21 +86,13 @@ def validate_choice(
 
 
 def parse_answers(payload: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
-    """Accept both answer shapes this plugin can receive.
-
-    ``{"answers": {"decision": {...}}}`` (TypeSafe/systemone) and a flat
-    ``{"decision": {...}}`` (a chat model that was asked for one JSON object).
-    """
+    """Read the ``answers`` envelope returned by the TypeSafe endpoint."""
     if not isinstance(payload, Mapping):
         raise ChoiceValidationError("answer payload is not an object")
     answers = payload.get("answers")
-    if isinstance(answers, Mapping):
-        return dict(answers)
-    return {
-        key: value
-        for key, value in payload.items()
-        if isinstance(key, str) and isinstance(value, Mapping) and "choice" in value
-    }
+    if not isinstance(answers, Mapping):
+        raise ChoiceValidationError("answer payload has no answers object")
+    return dict(answers)
 
 
 # --------------------------------------------------------------------------- #
@@ -188,28 +180,6 @@ def build_questions(
             },
         }
     return questions
-
-
-def render_prompt(
-    state: Mapping[str, Any],
-    questions: Mapping[str, Mapping[str, Any]],
-) -> tuple[str, str]:
-    """Render a chat-completion style prompt for backends that are not TypeSafe.
-
-    A generic chat model cannot take ``questions`` as an API field, so the same
-    contract is expressed as a JSON request/response pair.
-    """
-    heads = ", ".join(questions)
-    system = (
-        "You answer structured choice questions about a chat state and reply with JSON only.\n"
-        "Return one object with one entry per question name. Each entry must be "
-        '{"choice": <one offered id>, "confidence": <0..1>, '
-        '"probabilities": {<every offered id>: <0..1, summing to 1>}}.\n'
-        f"Questions: {heads}\n"
-        "Never invent ids. " + DECISION_RULES
-    )
-    user = json.dumps({"state": state, "questions": questions}, ensure_ascii=False)
-    return system, user
 
 
 def resolve_decisions(
