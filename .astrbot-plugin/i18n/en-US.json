@@ -1,0 +1,40 @@
+{
+  "metadata": {
+    "display_name": "Choice Gate",
+    "short_desc": "Decide by choice probability whether a message reaches the LLM.",
+    "desc": "Gates LLM replies with TypeSafe Jev: one request fans out several choice heads, answers are strictly validated, and rejected messages are stopped before the LLM request is queued. Adds a burst debounce."
+  },
+  "messages": {
+    "status.header": "Choice Gate: {state} · {model}",
+    "status.policy": "P(RESPOND) >= {threshold} · min confidence {confidence} · {fail_mode}",
+    "status.stats": "Decisions: {stats}",
+    "status.stats_empty": "Decisions: none yet",
+    "status.recent": "Recent:",
+    "status.recent_item": "  {time} p={p} -> {verdict} ({reason})",
+    "state.on": "on",
+    "state.off": "off",
+    "verdict.respond": "respond",
+    "verdict.silent": "silent",
+    "cmd.enabled": "Choice Gate is now {state}.",
+    "cmd.reset": "Cleared the debounce window and the decision stats.",
+    "prompt.header": "{endpoint} · model {model} · key {key_state} · {count} messages",
+    "prompt.key_set": "set",
+    "prompt.key_unset": "unset",
+    "test.usage": "Usage: /choicegate test <text>",
+    "test.header": "Dry run · input: {text} · messages: {count}",
+    "test.endpoint": "Endpoint: {endpoint} · model {model}",
+    "test.validation_failed": "Answer failed strict validation: {error}",
+    "test.call_failed": "Call failed: {error} (fail_mode={fail_mode}; chat would {effect})",
+    "test.effect_reply": "reply as usual",
+    "test.effect_silent": "stay silent",
+    "test.decision": "P(RESPOND)={p} · confidence={confidence} · target={target}",
+    "test.verdict": "-> {verdict} ({reason})",
+    "test.thresholds": "Thresholds: {rows}",
+    "test.threshold_row": ">={threshold} {verdict}",
+    "test.latency": "Latency: {ms}ms",
+    "test.heads": "Heads:",
+    "test.head_row": "  {head}: {values}",
+    "test.debounce": "Debounce: {detail}",
+    "truncated": "\\n... (truncated)"
+  }
+}

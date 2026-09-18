@@ -39,6 +39,7 @@ from choice_gate_core import (
     resolve_decisions,
     threshold_sensitivity,
 )
+from choice_gate_i18n import Translator, load_i18n, resolve_locale
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -60,6 +61,7 @@ class ChoiceGate(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
+        self._i18n = load_i18n(Path(__file__).resolve().parent)
         self._transcripts: dict[str, deque[ChatMessage]] = defaultdict(
             lambda: deque(maxlen=max(2, int(self._cfg("history_max_messages", 12))))
         )
@@ -81,6 +83,17 @@ class ChoiceGate(Star):
         except Exception:
             return default
         return default if value is None else value
+
+    def _locale(self) -> str:
+        try:
+            bot_language = self.context.get_config().get("language")
+        except Exception:
+            bot_language = None
+        return resolve_locale(self._cfg("language", "auto"), bot_language)
+
+    def _t(self, key: str, **kwargs) -> str:
+        """Localise a chat-facing string; falls back to English."""
+        return Translator(self._locale(), self._i18n).t(key, **kwargs)
 
     def _policy(self) -> GatePolicy:
         return GatePolicy(
@@ -356,7 +369,7 @@ class ChoiceGate(Star):
     # ------------------------------------------------------------------ #
     @filter.command("choicegate")
     async def choicegate(self, event: AstrMessageEvent):
-        """Choice Gate 状态与调试。用法: /choicegate [status|on|off|reset|test <文本>|prompt]"""
+        """Choice Gate status and tuning. Usage: /choicegate [status|on|off|reset|test <text>|prompt]"""
         argument = self._command_argument(event)
         action = argument.split(maxsplit=1)[0].lower() if argument else "status"
         rest = (
@@ -371,14 +384,14 @@ class ChoiceGate(Star):
             if callable(save):
                 save()
             yield event.plain_result(
-                f"Choice Gate 已{'开启' if action == 'on' else '关闭'}。"
+                self._t("cmd.enabled", state=self._t(f"state.{action}"))
             )
             return
         if action == "reset":
             self._limiter.forget()
             self._stats.clear()
             self._recent.clear()
-            yield event.plain_result("Choice Gate 统计与去抖窗口已重置。")
+            yield event.plain_result(self._t("cmd.reset"))
             return
         if action == "prompt":
             yield event.plain_result(self._prompt_text(event))
@@ -418,18 +431,22 @@ class ChoiceGate(Star):
         }
         preview = json.dumps(body, ensure_ascii=False)
         if len(preview) > 1500:
-            preview = preview[:1500] + "\n…（已截断）"
-        return (
-            f"📤 {self._cfg('base_url', DEFAULT_TYPESAFE_URL)}"
-            f" / 模型 {self._cfg('model', 'jev-latest')}"
-            f" / 密钥 {'已设置' if self._cfg('api_key', '') else '未设置'}\n"
-            f"转录 {len(transcript)} 条\n\n{preview}"
+            preview = preview[:1500] + self._t("truncated")
+        header = self._t(
+            "prompt.header",
+            endpoint=self._cfg("base_url", DEFAULT_TYPESAFE_URL),
+            model=self._cfg("model", "jev-latest"),
+            key_state=self._t(
+                "prompt.key_set" if self._cfg("api_key", "") else "prompt.key_unset"
+            ),
+            count=len(transcript),
         )
+        return f"📤 {header}\n\n{preview}"
 
     async def _test_text(self, event: AstrMessageEvent, text: str) -> str:
         """Dry run of the gate against a text, without touching real state."""
         if not text:
-            return "用法: /choicegate test <文本>"
+            return self._t("test.usage")
         umo = event.unified_msg_origin
         transcript = list(self._transcripts.get(umo, ()))
         probe = ChatMessage(
@@ -445,79 +462,118 @@ class ChoiceGate(Star):
             state, reply_target_enabled=bool(self._cfg("reply_target", True))
         )
         policy = self._policy()
-        header = (
-            f"🧪 Choice Gate 测试\n输入: {text[:100]}\n"
-            f"消息数: {len(transcript)}（未写入真实转录）\n"
-            f"端点: {self._cfg('base_url', DEFAULT_TYPESAFE_URL)} / {self._cfg('model', 'jev-latest')}"
+        header = "\n".join(
+            (
+                "🧪 " + self._t("test.header", text=text[:100], count=len(transcript)),
+                self._t(
+                    "test.endpoint",
+                    endpoint=self._cfg("base_url", DEFAULT_TYPESAFE_URL),
+                    model=self._cfg("model", "jev-latest"),
+                ),
+            )
         )
         try:
             resolved, _answers, latency_ms = await self._probe(state, questions)
         except ChoiceValidationError as exc:
-            return f"{header}\n❌ 后端返回的答案未通过严格校验: {exc}"
+            return f"{header}\n❌ {self._t('test.validation_failed', error=exc)}"
         except Exception as exc:  # noqa: BLE001 - the report must survive any TypeSafe failure
-            return (
-                f"{header}\n❌ 调用失败: {type(exc).__name__}: {exc}\n"
-                "（fail_mode="
-                f"{'open' if policy.fail_open else 'closed'}，实际聊天中"
-                f"{'会照常回复' if policy.fail_open else '会静默'}）"
+            return f"{header}\n❌ " + self._t(
+                "test.call_failed",
+                error=f"{type(exc).__name__}: {exc}",
+                fail_mode="open" if policy.fail_open else "closed",
+                effect=self._t(
+                    "test.effect_reply" if policy.fail_open else "test.effect_silent"
+                ),
             )
 
         decision = resolved["decision"]
         target = resolved.get("reply_target")
         probability = decision[1].get(RESPOND, 0.0)
         allowed, reason = policy.check(decision)
+        verdict_word = self._t("verdict.respond" if allowed else "verdict.silent")
         lines = [
             header,
-            f"P(RESPOND)={probability:.3f}  confidence={decision[2]:.3f}  "
-            f"target={target[0] if target else '-'}",
-            f"→ 判定: {'触发 LLM' if allowed else '静默'}（{reason}）",
-            "阈值敏感性: "
-            + " / ".join(
-                f">={threshold:.2f} {'触发' if verdict else '静默'}"
-                for threshold, verdict in threshold_sensitivity(
-                    probability, DEFAULT_THRESHOLDS
-                )
+            self._t(
+                "test.decision",
+                p=f"{probability:.3f}",
+                confidence=f"{decision[2]:.3f}",
+                target=target[0] if target else "-",
             ),
-            f"耗时: {latency_ms}ms",
-            "head 概率:",
-            "  decision: " + ", ".join(f"{k}={v:.3f}" for k, v in decision[1].items()),
+            self._t("test.verdict", verdict=verdict_word, reason=reason),
+            self._t(
+                "test.thresholds",
+                rows=" / ".join(
+                    self._t(
+                        "test.threshold_row",
+                        threshold=f"{threshold:.2f}",
+                        verdict=self._t(
+                            "verdict.respond" if verdict else "verdict.silent"
+                        ),
+                    )
+                    for threshold, verdict in threshold_sensitivity(
+                        probability, DEFAULT_THRESHOLDS
+                    )
+                ),
+            ),
+            self._t("test.latency", ms=latency_ms),
+            self._t("test.heads"),
+            self._t(
+                "test.head_row",
+                head="decision",
+                values=", ".join(f"{k}={v:.3f}" for k, v in decision[1].items()),
+            ),
         ]
         if target:
             lines.append(
-                "  reply_target: "
-                + ", ".join(f"{k}={v:.3f}" for k, v in target[1].items())
+                self._t(
+                    "test.head_row",
+                    head="reply_target",
+                    values=", ".join(f"{k}={v:.3f}" for k, v in target[1].items()),
+                )
             )
         if bool(self._cfg("debounce_enable", True)):
             allowed_now, detail = self._limiter.allow(umo)
-            lines.append(
-                f"去抖: 当前{'允许再回复' if allowed_now else '已用满预算'}（{detail}）"
-            )
+            lines.append(self._t("test.debounce", detail=detail))
         return "\n".join(lines)
 
     def _status_text(self) -> str:
         lines = [
-            f"Choice Gate: {'开启' if self._cfg('enable', True) else '关闭'}"
-            f" / TypeSafe {self._cfg('model', 'jev-latest')}",
-            f"阈值 P(RESPOND) >= {self._cfg('respond_threshold', 0.5)}"
-            f", 最低置信度 {self._cfg('min_confidence', 0.0)}"
-            f", 失败策略 {'fail-open' if self._policy().fail_open else 'fail-closed'}",
+            self._t(
+                "status.header",
+                state=self._t("state.on" if self._cfg("enable", True) else "state.off"),
+                model=self._cfg("model", "jev-latest"),
+            ),
+            self._t(
+                "status.policy",
+                threshold=self._cfg("respond_threshold", 0.5),
+                confidence=self._cfg("min_confidence", 0.0),
+                fail_mode="fail-open" if self._policy().fail_open else "fail-closed",
+            ),
         ]
         if self._stats:
             lines.append(
-                "统计: "
-                + ", ".join(
-                    f"{key}={value}" for key, value in sorted(self._stats.items())
+                self._t(
+                    "status.stats",
+                    stats=", ".join(
+                        f"{key}={value}" for key, value in sorted(self._stats.items())
+                    ),
                 )
             )
         else:
-            lines.append("统计: 暂无")
+            lines.append(self._t("status.stats_empty"))
         if self._recent:
-            lines.append("最近决策:")
+            lines.append(self._t("status.recent"))
             for item in list(self._recent)[-5:]:
                 lines.append(
-                    f"  {item['time']} p={item['p']:.2f} conf={item['confidence']:.2f} "
-                    f"target={item['target']} -> "
-                    f"{'触发' if item['respond'] else '静默'} ({item['reason']})"
+                    self._t(
+                        "status.recent_item",
+                        time=item["time"],
+                        p=f"{item['p']:.2f}",
+                        verdict=self._t(
+                            "verdict.respond" if item["respond"] else "verdict.silent"
+                        ),
+                        reason=item["reason"],
+                    )
                 )
         return "\n".join(lines)
 

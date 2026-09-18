@@ -1,122 +1,145 @@
 {
   "enable": {
-    "description": "启用本插件",
+    "description": "Enable the plugin",
     "type": "bool",
     "default": true,
-    "hint": "关闭后插件完全不介入消息流程。"
+    "hint": "When off, the plugin does not touch the message flow."
+  },
+  "language": {
+    "description": "Reply language",
+    "type": "string",
+    "default": "auto",
+    "options": [
+      "auto",
+      "en-US",
+      "zh-CN"
+    ],
+    "labels": [
+      "Follow AstrBot",
+      "English",
+      "简体中文"
+    ],
+    "hint": "Applies to this plugin's chat replies. Auto follows AstrBot's language setting and falls back to English."
   },
   "api_key": {
-    "description": "TypeSafe API Key",
+    "description": "TypeSafe API key",
     "type": "string",
     "default": "",
     "secret": true,
-    "hint": "在 typesafe.ai 获取。",
-    "obvious_hint": true
+    "obvious_hint": true,
+    "hint": "Get one at typesafe.ai."
   },
   "model": {
-    "description": "TypeSafe 模型",
+    "description": "TypeSafe model",
     "type": "string",
     "default": "jev-latest"
   },
   "base_url": {
-    "description": "TypeSafe 端点",
+    "description": "TypeSafe endpoint",
     "type": "string",
     "default": "https://api.typesafe.ai/v1/systemone"
   },
   "timeout_sec": {
-    "description": "单次请求超时（秒）",
+    "description": "Request timeout (seconds)",
     "type": "int",
     "default": 20
   },
   "retries": {
-    "description": "限流重试次数",
+    "description": "Retries on rate limits",
     "type": "int",
     "default": 1,
-    "hint": "仅在 429/503/529 时重试，指数退避。"
+    "hint": "Retries 429/503/529 with exponential backoff."
   },
   "respond_threshold": {
-    "description": "触发阈值 P(RESPOND)",
+    "description": "Respond threshold",
     "type": "float",
     "default": 0.5,
-    "hint": "P(RESPOND) 低于该值就静默。调高更保守。"
+    "hint": "A message stays unanswered when P(RESPOND) is below this. Raise it to be more conservative."
   },
   "min_confidence": {
-    "description": "最低置信度",
+    "description": "Minimum confidence",
     "type": "float",
-    "default": 0.0
+    "default": 0.0,
+    "hint": "Stay silent when the reported confidence is below this."
   },
   "fail_mode": {
-    "description": "TypeSafe 异常时的策略",
+    "description": "Behaviour on failure",
     "type": "string",
     "default": "open",
     "options": [
       "open",
       "closed"
     ],
-    "hint": "open：异常时照常回复（不影响可用性）；closed：异常时静默（更省）。"
+    "labels": [
+      "open: reply as usual",
+      "closed: stay silent"
+    ],
+    "hint": "Applies to TypeSafe errors and answers that fail validation."
   },
   "scope_private": {
-    "description": "对私聊生效",
+    "description": "Handle private chats",
     "type": "bool",
     "default": true
   },
   "scope_group": {
-    "description": "对群聊生效",
+    "description": "Handle group chats",
     "type": "bool",
     "default": true
   },
   "bypass_command": {
-    "description": "指令消息直接放行",
+    "description": "Let commands through",
     "type": "bool",
     "default": true
   },
   "bypass_mention": {
-    "description": "被 @ 时直接放行",
+    "description": "Let mentions through",
     "type": "bool",
     "default": true
   },
   "bypass_quote_bot": {
-    "description": "引用机器人消息时直接放行",
+    "description": "Let quotes of the bot through",
     "type": "bool",
     "default": true
   },
   "bypass_admin": {
-    "description": "管理员直接放行",
+    "description": "Let administrators through",
     "type": "bool",
     "default": true
   },
   "debounce_enable": {
-    "description": "启用突发去抖",
+    "description": "Enable burst debounce",
     "type": "bool",
     "default": true
   },
   "debounce_window_sec": {
-    "description": "去抖窗口（秒）",
+    "description": "Debounce window (seconds)",
     "type": "int",
     "default": 25
   },
   "debounce_max_replies": {
-    "description": "窗口内最多回复次数",
+    "description": "Replies per window",
     "type": "int",
-    "default": 1
+    "default": 1,
+    "hint": "1 means one reply per burst."
   },
   "reply_target": {
-    "description": "预测要回复哪条消息",
+    "description": "Predict which message to answer",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "Adds a second speculative head to the same request."
   },
   "inject_hint": {
-    "description": "把选中的消息提示给模型",
+    "description": "Tell the model which message was selected",
     "type": "bool",
     "default": true
   },
   "history_max_messages": {
-    "description": "传给决策模型的消息条数",
+    "description": "Messages sent to the gate",
     "type": "int",
     "default": 12
   },
   "log_decisions": {
-    "description": "记录每次决策",
+    "description": "Log every decision",
     "type": "bool",
     "default": false
   }
