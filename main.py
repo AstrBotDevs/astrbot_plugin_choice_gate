@@ -162,6 +162,13 @@ class ChoiceGate(Star):
         except Exception:
             return False
 
+    @staticmethod
+    def _is_user_message(event: AstrMessageEvent) -> bool:
+        """Whether this request came from a real inbound user message."""
+        if str(event.get_sender_id()) == str(event.get_self_id()):
+            return False
+        return bool((event.message_str or "").strip() or event.get_messages())
+
     def _facts(self, event: AstrMessageEvent) -> EventFacts:
         prefixes = self.context.get_config(umo=event.unified_msg_origin).get(
             "wake_prefix", ["/"]
@@ -190,6 +197,9 @@ class ChoiceGate(Star):
         so no request, no queue slot and no tokens are spent on it.
         """
         if not self._cfg("enable", True):
+            return
+        if not self._is_user_message(event):
+            # Scheduled or plugin-triggered requests must never be gated.
             return
         facts = self._facts(event)
         if facts.is_private and not self._cfg("scope_private", True):
