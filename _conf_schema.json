@@ -1,0 +1,155 @@
+{
+  "enable": {
+    "description": "启用本插件",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后插件完全不介入消息流程。"
+  },
+  "backend": {
+    "description": "决策后端",
+    "type": "string",
+    "default": "provider",
+    "options": [
+      "provider",
+      "openai",
+      "typesafe"
+    ],
+    "hint": "provider：复用 AstrBot 已配置的模型提供商（最省事）；openai：任何 OpenAI 兼容端点，推荐用快的小模型；typesafe：TypeSafe 原生 questions 接口（需要 TYPESAFE_API_KEY）。"
+  },
+  "provider_id": {
+    "description": "用于决策的模型提供商",
+    "type": "string",
+    "default": "",
+    "_special": "select_provider",
+    "hint": "留空则使用当前会话正在使用的提供商。建议单独选一个便宜快的小模型。"
+  },
+  "base_url": {
+    "description": "OpenAI 兼容端点 / TypeSafe 端点",
+    "type": "string",
+    "default": "https://api.deepseek.com/v1",
+    "hint": "backend=openai 时填 .../v1；backend=typesafe 时填 https://api.typesafe.ai/v1/systemone。"
+  },
+  "api_key": {
+    "description": "接口密钥",
+    "type": "string",
+    "default": "",
+    "secret": true
+  },
+  "model": {
+    "description": "模型名",
+    "type": "string",
+    "default": "deepseek-chat",
+    "hint": "backend=typesafe 时一般是 jev-latest。"
+  },
+  "disable_reasoning": {
+    "description": "关闭推理",
+    "type": "bool",
+    "default": true,
+    "hint": "决策是个选择题，关掉推理能省掉大部分首 token 延迟。"
+  },
+  "max_tokens": {
+    "description": "决策请求最大输出",
+    "type": "int",
+    "default": 512
+  },
+  "timeout_sec": {
+    "description": "单次请求超时（秒）",
+    "type": "int",
+    "default": 20
+  },
+  "retries": {
+    "description": "限流重试次数",
+    "type": "int",
+    "default": 1,
+    "hint": "仅在 429/503/529 时重试，指数退避。"
+  },
+  "respond_threshold": {
+    "description": "触发阈值 P(RESPOND)",
+    "type": "float",
+    "default": 0.5,
+    "hint": "P(RESPOND) 低于该值就静默。调高更保守。"
+  },
+  "min_confidence": {
+    "description": "最低置信度",
+    "type": "float",
+    "default": 0.0,
+    "hint": "模型自报置信度低于该值就静默。"
+  },
+  "fail_mode": {
+    "description": "后端异常时的策略",
+    "type": "string",
+    "default": "open",
+    "options": [
+      "open",
+      "closed"
+    ],
+    "hint": "open：异常时照常回复（不影响可用性）；closed：异常时静默（更省）。"
+  },
+  "scope_private": {
+    "description": "对私聊生效",
+    "type": "bool",
+    "default": true
+  },
+  "scope_group": {
+    "description": "对群聊生效",
+    "type": "bool",
+    "default": true
+  },
+  "bypass_command": {
+    "description": "指令消息直接放行",
+    "type": "bool",
+    "default": true
+  },
+  "bypass_mention": {
+    "description": "被 @ 时直接放行",
+    "type": "bool",
+    "default": true
+  },
+  "bypass_quote_bot": {
+    "description": "引用机器人消息时直接放行",
+    "type": "bool",
+    "default": true
+  },
+  "bypass_admin": {
+    "description": "管理员直接放行",
+    "type": "bool",
+    "default": true
+  },
+  "debounce_enable": {
+    "description": "启用突发去抖",
+    "type": "bool",
+    "default": true
+  },
+  "debounce_window_sec": {
+    "description": "去抖窗口（秒）",
+    "type": "int",
+    "default": 25
+  },
+  "debounce_max_replies": {
+    "description": "窗口内最多回复次数",
+    "type": "int",
+    "default": 1,
+    "hint": "设为 1 表示一轮刷屏只回一次。"
+  },
+  "reply_target": {
+    "description": "预测要回复哪条消息",
+    "type": "bool",
+    "default": true,
+    "hint": "同一个请求里多答一个 head，仅在决定回复时消费。"
+  },
+  "inject_hint": {
+    "description": "把选中的消息提示给模型",
+    "type": "bool",
+    "default": true
+  },
+  "history_max_messages": {
+    "description": "传给决策模型的消息条数",
+    "type": "int",
+    "default": 12
+  },
+  "log_decisions": {
+    "description": "记录每次决策",
+    "type": "bool",
+    "default": false
+  }
+}

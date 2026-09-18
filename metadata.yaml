@@ -1,0 +1,6 @@
+name: astrbot_plugin_choice_gate
+desc: 用「选择概率」决定要不要触发 LLM。单次请求扇出多个 choice head，严格校验后按阈值放行，并带突发去抖与限流（灵感来自 browser-use/jev-ultrafast）。
+author: Soulter
+version: 0.1.0
+repo: https://github.com/AstrBotDevs/astrbot_plugin_choice_gate
+short_desc: 概率式触发门：不回复不该回复的消息
