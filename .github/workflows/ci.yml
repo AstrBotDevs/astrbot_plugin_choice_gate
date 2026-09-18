@@ -12,8 +12,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ruff pytest httpx
+      - run: pip install ruff pytest httpx pyyaml
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -q
       - run: python -m compileall -q main.py reply_gate_core.py
+      - name: Validate plugin manifests
+        run: |
+          python - <<'PY'
+          import json, pathlib, yaml
+          root = pathlib.Path('.')
+          meta = yaml.safe_load((root / 'metadata.yaml').read_text(encoding='utf-8'))
+          for key in ('name', 'desc', 'short_desc', 'version', 'author', 'repo'):
+              assert isinstance(meta.get(key), str) and meta[key].strip(), key
+          json.loads((root / '_conf_schema.json').read_text(encoding='utf-8'))
+          for path in (root / '.astrbot-plugin' / 'i18n').glob('*.json'):
+              assert isinstance(json.loads(path.read_text(encoding='utf-8')), dict), path
+          print('manifests ok')
+          PY
